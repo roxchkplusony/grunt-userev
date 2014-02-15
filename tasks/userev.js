@@ -51,58 +51,60 @@ module.exports = function (grunt) {
     grunt.log.debug('filerev.summary: ' + JSON.stringify(versioned, null, 4));
 
     if (versioned) {
-      this.files.forEach(function(file) {
-        file.src.filter(function(filepath) {
+      this.files.forEach(function (file) {
+        file.src.filter(function (filepath) {
           if (!grunt.file.exists(filepath)) {
             grunt.log.warn('Source file "' + filepath + '" not found.');
             return false;
           } else {
             return true;
           }
-        }).forEach(function(filepath) {
-          var content = grunt.file.read(filepath);
-          var updated = false;
-          var replacement, lastLink, baseLink, hashLink;
-
-          for (var label in options.patterns) {
-            var pattern = options.patterns[label];
-            var match = pattern.exec(content);
-            if (match) {
-              grunt.log.debug('Matching ' + [filepath, pattern, JSON.stringify(match)].join(': '));
-              replacement = match[0];
-              lastLink = match[1] || match[0];
-              baseLink = options.hash ? replaceFirstGroup(lastLink, options.hash, '') : lastLink;
-              for (var assetpath in versioned) {
-                if (endsWith(assetpath, baseLink)) {
-                  if (!updated) {
-                    grunt.log.writeln('Updating ' + filepath.cyan +
-                      (file.dest ? ' -> ' + file.dest.cyan : '.'));
+        }).forEach(function (filepath) {
+            var acc = grunt.file.read(filepath);
+            var content = "";
+            var updated = false;
+            var link, hashed;
+            for (var label in options.patterns) {
+              if (options.patterns.hasOwnProperty(label)) {
+                content = acc + content;
+                acc = "";
+                var pattern = options.patterns[label];
+                var match = pattern.exec(content);
+                while (match) {
+                  grunt.log.debug('Matching ' + [filepath, pattern, JSON.stringify(match)].join(': '));
+                  link = match[1] || match[0];
+                  var found = false;
+                  for (var assetPath in versioned) {
+                    if (versioned.hasOwnProperty(assetPath)) {
+                      if (endsWith(assetPath, link)) {
+                        hashed = versioned[assetPath].slice(assetPath.length - link.length);
+                        if (link !== hashed) {
+                          var pos = content.indexOf(link);
+                          while (pos > -1) {
+                            if (!updated) {
+                              grunt.log.writeln('Updating ' + filepath.cyan +
+                                (file.dest ? ' -> ' + file.dest.cyan : '.'));
+                            }
+                            grunt.log.writeln('Linking ' + label + ': ' + link + ' -> ' + hashed);
+                            acc += content.substr(0, pos) + hashed;
+                            content = content.substr(pos + link.length);
+                            updated = true;
+                            found = true;
+                            pos = content.indexOf(link);
+                          }
+                        }
+                        break;
+                      }
+                    }
                   }
-                  hashLink = versioned[assetpath].slice(assetpath.length - baseLink.length);
-                  if (lastLink !== hashLink) {
-                    grunt.log.writeln('Linking ' + label + ': ' + lastLink +
-                      (baseLink !== lastLink ? ' -> ' + baseLink : '') + ' -> ' + hashLink.green);
-                    replacement = replacement.replace(lastLink, hashLink);
-                    content = content.replace(pattern, replacement);
-                    updated = true;
-                  } else {
-                    grunt.log.writeln('Already linked ' + label + ': ' +
-                      baseLink + ' -> ' + hashLink.green);
-                  }
-                  break;
-                } else {
-                  grunt.log.debug('No match: ' + lastLink +
-                    (baseLink !== lastLink ? ' -> ' + baseLink : '') + ' <> ' + assetpath);
+                  match = found && pattern.exec(content);
                 }
               }
-            } else {
-              grunt.log.debug('Not matching ' + filepath + ': ' + pattern);
             }
-          }
-          if (updated) {
-            grunt.file.write(file.dest || filepath, content);
-          }
-        });
+            if (updated) {
+              grunt.file.write(file.dest || filepath, acc + content);
+            }
+          });
       });
     }
   });
